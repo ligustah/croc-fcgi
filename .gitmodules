@@ -1,0 +1,3 @@
+[submodule "croc-src"]
+	path = croc-src
+	url = https://github.com/JarrettBillingsley/Croc.git
