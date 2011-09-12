@@ -124,7 +124,7 @@ int main(string[] args)
 	{
 		CDC.compile(["croc-src/croc"], ["-lib", "-oflib/croc" ~ lib_ext]);
 	}
-	CDC.compile(["lib", "main.d"], ["-Icroc-src -ofcroc-fcgi"], null, null, true);
+	CDC.compile(["lib", "main.d"], ["-Icroc-src",  "-ofcroc-fcgi", "-L-lfcgi"]);
 	return 0;
 }
 
