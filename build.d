@@ -110,16 +110,13 @@
  * Use any of these functions in your own build script.
  */
 
-module cdc;
+module build;
 
 /**
  * Use to implement your own custom build script, or pass args on to defaultBuild() 
  * to use this file as a generic build script like bud or rebuild. */
 int main(string[] args)
 {
-	// Operate cdc as a generic build script
-	//return defaultBuild(args);
-
 	if (!FS.exists("lib/croc" ~ lib_ext))
 	{
 		CDC.compile(["croc-src/croc"], ["-lib", "-oflib/croc" ~ lib_ext]);
@@ -135,36 +132,24 @@ int main(string[] args)
  */
 
 // Imports
-version(Tango)
-{	import tango.core.Array : find;
-	import tango.core.Exception : ProcessException;
-	import tango.core.Thread;
-	import tango.io.device.File;
-	import tango.io.FilePath;
-	import tango.io.FileScan;
-	import tango.io.FileSystem;
-	import tango.io.Stdout;
-	import tango.sys.Environment;
-	import tango.text.convert.Format;
-	import tango.text.Regex;
-	import tango.text.Util;
-	import tango.text.Ascii;
-	import tango.time.Clock;
-	import tango.util.Convert;
-	extern (C) int system(char *);  // Tango's process hangs sometimes
-	//import tango.core.tools.TraceExceptions; // enable to get stack trace in buildyage.d on internal failure
-} else
-{	import std.date;
-	import std.string : join, find, replace, tolower;
-	import std.stdio : writefln;
-	import std.path : sep, getDirName, getName, addExt;
-	import std.file : chdir, copy, isdir, isfile, listdir, mkdir, exists, getcwd, remove, write;
-	import std.format;
-	import std.regexp;
-	import std.traits;
-	import std.c.process;
-	import std.c.time;
-}
+import tango.core.Array : find;
+import tango.core.Exception : ProcessException;
+import tango.core.Thread;
+import tango.io.device.File;
+import tango.io.FilePath;
+import tango.io.FileScan;
+import tango.io.FileSystem;
+import tango.io.Stdout;
+import tango.sys.Environment;
+import tango.text.convert.Format;
+import tango.text.Regex;
+import tango.text.Util;
+import tango.text.Ascii;
+import tango.time.Clock;
+import tango.util.Convert;
+extern (C) int system(char *);  // Tango's process hangs sometimes
+//import tango.core.tools.TraceExceptions; // enable to get stack trace in buildyage.d on internal failure
+
 
 /// This is always set to the name of the default compiler, which is the compiler used to build cdc.
 version (DigitalMars)
@@ -735,11 +720,10 @@ struct FS
 
 	/// Create a directory.  Returns false if the directory already exists.
 	static bool mkDir(string path)
-	{	if (!FS.exists(path))
-		{	version(Tango)
-				FilePath(path).create();
-			else
-				mkdir(path);
+	{
+		if (!FS.exists(path))
+		{
+			FilePath(path).create();
 			return true;
 		}
 		return false;
@@ -831,10 +815,8 @@ struct FS
 struct String
 {
 	static string changeExt(string filename, string ext)
-	{	version(Tango)
-			return FilePath(filename).folder() ~ FilePath(filename).name() ~ ext;
-		else
-			return addExt(filename, ext[1..$]);
+	{
+		return FilePath(filename).folder() ~ FilePath(filename).name() ~ ext;
 	}
 	unittest {
 		assert(changeExt("foo.a", "b") == "foo.b");
@@ -843,12 +825,8 @@ struct String
 
 	/// Does haystack contain needle?
 	static bool contains(T)(T[] haystack, T needle)
-	{	version (Tango)
-			return .contains(haystack, needle);
-		foreach (straw; haystack)
-			if (straw == needle)
-				return true;
-		return false;
+	{
+		return .contains(haystack, needle);
 	}
 
 	/// Find the first or last instance of needle in haystack, or -1 if not found.
@@ -886,20 +864,10 @@ struct String
 	 * --------
 	 */
 	static string format(T...)(string message, T args)
-	{	version (Tango)
-		{	message = substitute(message, "%s", "{}");
-			return Format.convert(message, args);
-		} else
-		{	string swritef(...) // wrapper to convert varargs
-			{	string res;
-				void putchar(dchar c)
-				{   res~= c;
-				}
-				doFormat(&putchar, _arguments, cast(char*)_argptr);
-				return res;
-			}
-			return swritef(message, args);
-	}	}
+	{
+		message = substitute(message, "%s", "{}");
+		return Format.convert(message, args);
+	}
 	unittest {
 		assert(String.format("%s World %s", "Hello", 23) == "Hello World 23");
 		assert(String.format("foo") == "foo");
@@ -912,16 +880,14 @@ struct String
 
 	/// In source, repalce all instances of "find" with "repl".
 	static string replace(string source, string find, string repl)
-	{	version (Tango)
-			return substitute(source, find, repl);
-		else return .replace(source, find, repl);
+	{
+		return substitute(source, find, repl);
 	}
 
 	/// Split an array by the regex pattern.
 	static string[] split(string source, string pattern)
-	{	version (Tango)
-			return Regex(pattern).split(source);
-		else return .split(source, pattern);
+	{
+		return Regex(pattern).split(source);
 	}
 
 	/// Does "source" begin with "beginning" ?
@@ -931,17 +897,8 @@ struct String
 
 	/// Get the ascii lower-case version of a string.
 	static string toLower(string input)
-	{	version (Tango)
-			return .toLower(input);
-		else return tolower(input);
+	{
+		return .toLower(input);
 	}
 
-}
-
-// Define ProcessException in Phobos
-version(Tango) {}
-else
-{	class ProcessException : Exception {
-		this(string message) { super(message); }
-	};
 }
