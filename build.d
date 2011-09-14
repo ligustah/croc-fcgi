@@ -112,17 +112,48 @@
 
 module build;
 
+import lib.ini;
+
 /**
  * Use to implement your own custom build script, or pass args on to defaultBuild() 
  * to use this file as a generic build script like bud or rebuild. */
 int main(string[] args)
 {
+	char[][] defaultArgs = ["-Icroc-src"];
 	if (!FS.exists("lib/croc" ~ lib_ext))
 	{
 		CDC.compile(["croc-src/croc"], ["-lib", "-oflib/croc" ~ lib_ext]);
 	}
-	CDC.compile(["lib", "main.d"], ["-Icroc-src",  "-ofcroc-fcgi", "-L-lfcgi"]);
+	auto modules = compileModules();
+	CDC.compile(["lib", "main.d"], defaultArgs ~ ["-ofcroc-fcgi", "-L-lfcgi"]);
 	return 0;
+}
+
+char[][] compileModules()
+{
+	FilePath[] modules = FilePath("modules").toList((FilePath path, bool isFolder)
+			{
+				return isFolder;
+			});;
+	
+	char[][] moduleNames;
+	
+	foreach(mod; modules)
+	{
+		try
+		{
+			auto conf = new Ini(mod.dup.append("build.ini").toString());
+			moduleNames ~= mod.name();
+			
+			Stdout.formatln("module: {} native: {}", mod.name, conf.section["type"] == "native");
+		}
+		catch(IOException ioe)
+		{
+			Stdout.formatln("module: {} no INI file found");
+		}
+	}
+	
+	return moduleNames;
 }
 
 /*
@@ -133,7 +164,7 @@ int main(string[] args)
 
 // Imports
 import tango.core.Array : find;
-import tango.core.Exception : ProcessException;
+import tango.core.Exception;
 import tango.core.Thread;
 import tango.io.device.File;
 import tango.io.FilePath;
