@@ -1,4 +1,4 @@
-#!dmd -run
+#!/usr/bin/env rdmd --shebang
 /**
  * License: Boost 1.0
  *
@@ -114,19 +114,66 @@ module build;
 
 import lib.ini;
 
+import tango.io.stream.Format;
+
 /**
  * Use to implement your own custom build script, or pass args on to defaultBuild() 
  * to use this file as a generic build script like bud or rebuild. */
 int main(string[] args)
 {
-	char[][] defaultArgs = ["-Icroc-src"];
+	char[][] defaultArgs = ["-Icroc-src", "-Imodules"];
 	if (!FS.exists("lib/croc" ~ lib_ext))
 	{
 		CDC.compile(["croc-src/croc"], ["-lib", "-oflib/croc" ~ lib_ext]);
 	}
+	
 	auto modules = compileModules();
-	CDC.compile(["lib", "main.d"], defaultArgs ~ ["-ofcroc-fcgi", "-L-lfcgi"]);
+	includeModules(modules);
+	
+	defaultArgs ~= linkModules(modules, "modules/");
+	
+	CDC.compile(["lib", "main.d", "enabled_modules.d"], defaultArgs ~ ["-ofcroc-fcgi", "-L-lfcgi"]);
 	return 0;
+}
+
+char[][] linkModules(char[][] modules, char[] base)
+{
+	char[][] ret;
+	
+	foreach(mod; modules)
+	{
+		ret ~= base ~ mod ~ lib_ext;
+	}
+	
+	return ret;
+}
+
+void includeModules(char[][] modules)
+{
+	auto outF = new File("enabled_modules.d", File.ReadWriteCreate);
+	auto f = new FormatOutput!(char)(outF);
+	
+	f("module enabled_modules;").newline.newline;
+	
+	f("import croc.api;").newline;
+	f("import lib.fcgi;").newline.newline;
+	
+	foreach(mod; modules)
+	{
+		f.formatln("import {0}.{0};", mod);
+	}
+	
+	f.newline;
+	f("void initModules(CrocThread* t, FCGI_Request r){").newline;
+	
+	foreach(mod; modules)
+	{
+		f.formatln("\tinit_{}(t, r);", mod);
+	}
+	f("}");
+	
+	f.flush;
+	f.close;
 }
 
 char[][] compileModules()
@@ -134,22 +181,29 @@ char[][] compileModules()
 	FilePath[] modules = FilePath("modules").toList((FilePath path, bool isFolder)
 			{
 				return isFolder;
-			});;
+			});
 	
 	char[][] moduleNames;
 	
 	foreach(mod; modules)
 	{
-		try
-		{
-			auto conf = new Ini(mod.dup.append("build.ini").toString());
-			moduleNames ~= mod.name();
+		auto f = mod.dup.append("build.ini");
+		
+		if(!f.exists) // no ini, no module!
+			continue;
 			
-			Stdout.formatln("module: {} native: {}", mod.name, conf.section["type"] == "native");
-		}
-		catch(IOException ioe)
+		auto conf = new Ini(f.toString());
+		
+		bool native = conf.section["type"] == "native";
+		moduleNames ~= mod.name();
+		
+		Stdout.formatln("module: {} native: {}", mod.name, native);
+		
+		if(native)
 		{
-			Stdout.formatln("module: {} no INI file found");
+			//compile it
+			
+			CDC.compile([mod.name], ["-I../croc-src", "-I../", "-lib"], null, "modules", true);
 		}
 	}
 	

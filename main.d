@@ -8,6 +8,8 @@ import croc.api;
 import croc.ex;
 import croc.ex_bind;
 
+import enabled_modules;
+
 void main()
 {
 	FCGI_Request r;
@@ -20,6 +22,7 @@ void main()
 	while(FCGX.accept(r, true) >= 0)
 	{
 		Stdout("Content-Type: text/plain").newline.newline;
+		initModules(t, r);
 		
 		superPush(t, r.params);
 		newGlobal(t, "params");
