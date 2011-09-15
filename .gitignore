@@ -1,0 +1,6 @@
+#ignore temporary files
+enabled_modules.d
+*.[oa]
+
+#ignore resulting binary
+croc-fcgi
