@@ -121,18 +121,18 @@ import tango.io.stream.Format;
  * to use this file as a generic build script like bud or rebuild. */
 int main(string[] args)
 {
-	char[][] defaultArgs = ["-Icroc-src", "-Imodules"];
+	char[][] defaultArgs = ["-Icroc-src"];
 	if (!FS.exists("lib/croc" ~ lib_ext))
 	{
 		CDC.compile(["croc-src/croc"], ["-lib", "-oflib/croc" ~ lib_ext]);
 	}
 	
 	auto modules = compileModules();
-	includeModules(modules);
+	defaultArgs ~= includeModules(modules, "modules/");
 	
 	defaultArgs ~= linkModules(modules, "modules/");
 	
-	CDC.compile(["lib", "main.d", "enabled_modules.d"], defaultArgs ~ ["-ofcroc-fcgi", "-L-lfcgi"]);
+	CDC.compile(["lib", "main.d", "enabled_modules.d"], defaultArgs ~ ["-ofcroc-fcgi", "-L-lfcgi"], null, null);
 	return 0;
 }
 
@@ -148,10 +148,11 @@ char[][] linkModules(char[][] modules, char[] base)
 	return ret;
 }
 
-void includeModules(char[][] modules)
+char[][] includeModules(char[][] modules, char[] base)
 {
 	auto outF = new File("enabled_modules.d", File.ReadWriteCreate);
 	auto f = new FormatOutput!(char)(outF);
+	char[][] imports;
 	
 	f("module enabled_modules;").newline.newline;
 	
@@ -160,7 +161,8 @@ void includeModules(char[][] modules)
 	
 	foreach(mod; modules)
 	{
-		f.formatln("import {0}.{0};", mod);
+		f.formatln("import {0};", mod);
+		imports ~= "-I" ~ base ~ mod;
 	}
 	
 	f.newline;
@@ -168,12 +170,14 @@ void includeModules(char[][] modules)
 	
 	foreach(mod; modules)
 	{
-		f.formatln("\tinit_{}(t, r);", mod);
+		f.formatln("\t{}_init(t, r);", mod);
 	}
 	f("}");
 	
 	f.flush;
 	f.close;
+	
+	return imports;
 }
 
 char[][] compileModules()
@@ -201,13 +205,48 @@ char[][] compileModules()
 		
 		if(native)
 		{
-			//compile it
+			//compile it, if needed
 			
-			CDC.compile([mod.name], ["-I../croc-src", "-I../", "-lib"], null, "modules", true);
+			auto libFile = FilePath("modules/" ~ mod.name ~ lib_ext);
+			
+			if(libFile.exists())	//check if we have to recompile
+			{
+				if(findNewest(mod) > libFile.modified)
+				{
+					Stdout.formatln("module {} modified, recompiling", mod.name);
+				}
+				else
+				{
+					Stdout.formatln("skipping module {}, already up to date", mod.name);
+					continue;
+				}
+			}
+			
+			CDC.compile([mod.name ~ ".d"], ["-I../../croc-src", "-I../../", "-lib", "-of../" ~ mod.name ~ lib_ext], null, mod.toString);
 		}
 	}
 	
 	return moduleNames;
+}
+
+/**
+	recursively find the newest file under 'base'
+*/
+Time findNewest(FilePath base, Time current = Time.min)
+{
+	foreach(file; base.toList)
+	{
+		if(file.isFile)
+		{
+			if(file.modified > current)
+				current = file.modified;
+		}
+		else
+		{
+			current = findNewest(file, current);
+		}
+	}
+	return current;
 }
 
 /*
