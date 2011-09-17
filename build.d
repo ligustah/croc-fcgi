@@ -132,7 +132,14 @@ int main(string[] args)
 	
 	defaultArgs ~= linkModules(modules, "modules/");
 	
-	CDC.compile(["lib", "main.d", "enabled_modules.d"], defaultArgs ~ ["-ofcroc-fcgi"/*, "-L-lfcgi"*/], null, null, true);
+	version(Windows){}
+	else
+	{
+		//explicitly link against libfcgi on non-Windows
+		defaultArgs ~= ["-L-lfcgi"];
+	}
+	
+	CDC.compile(["lib", "main.d", "enabled_modules.d"], defaultArgs ~ ["-ofcroc-fcgi"], null, null, true);
 	return 0;
 }
 
