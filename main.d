@@ -24,9 +24,6 @@ void main()
 		Stdout("Content-Type: text/plain").newline.newline;
 		initModules(t, r);
 		
-		superPush(t, r.params);
-		newGlobal(t, "params");
-		
 		try
 		{
 			runFile(t, r.params["SCRIPT_FILENAME"]);
