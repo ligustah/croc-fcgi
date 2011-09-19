@@ -1,6 +1,7 @@
 module main;
 
 import lib.fcgi;
+import lib.util;
 
 import tango.io.Stdout;
 
@@ -22,7 +23,8 @@ void main()
 	while(FCGX.accept(r, true) >= 0)
 	{
 		Stdout("Content-Type: text/plain").newline.newline;
-		initModules(t, r);
+		pushRequest(t, r);
+		initModules(t);
 		
 		try
 		{

@@ -166,11 +166,11 @@ char[][] includeModules(char[][] modules, char[] base)
 	}
 	
 	f.newline;
-	f("void initModules(CrocThread* t, FCGI_Request r){").newline;
+	f("void initModules(CrocThread* t){").newline;
 	
 	foreach(mod; modules)
 	{
-		f.formatln("\t{}_init(t, r);", mod);
+		f.formatln("\t{}_init(t);", mod);
 	}
 	f("}");
 	
