@@ -115,6 +115,7 @@ module build;
 import lib.ini;
 
 import tango.io.stream.Format;
+import Integer = tango.text.convert.Integer;
 
 /**
  * Use to implement your own custom build script, or pass args on to defaultBuild() 
@@ -167,6 +168,17 @@ char[][] includeModules(char[][] modules, char[] base)
 	
 	f.newline;
 	f("void initModules(CrocThread* t){").newline;
+	f("\tgetRegistry(t);").newline;
+	f("\tpushString(t, \"croc.bind.initialized\");").newline;
+	f("\tif(!opin(t, -1, -2)){").newline;
+	f("\t\tnewTable(t);       fielda(t, -3, \"croc.bind.WrappedClasses\");").newline;
+	f("\t\tnewTable(t);       fielda(t, -3, \"croc.bind.WrappedInstances\");").newline;
+	f("\t\tpushBool(t, true); fielda(t, -3);").newline;
+	f("\t\tpop(t);").newline;
+	f("\t}").newline;
+	f("\telse").newline;
+	f("\t\tpop(t, 2);").newline;
+	f.newline;
 	
 	foreach(mod; modules)
 	{
@@ -222,7 +234,15 @@ char[][] compileModules()
 				}
 			}
 			
-			CDC.compile([mod.name ~ ".d"], ["-I../../croc-src", "-I../../", "-lib", "-of../" ~ mod.name ~ lib_ext], null, mod.toString);
+			char[][] arguments;
+			
+			for(int arg = 1; conf.section.has("arg" ~ Integer.toString(arg)); arg++)
+			{
+				arguments ~= conf.section["arg" ~ Integer.toString(arg)];
+			}
+			
+			//one command to rule them all!
+			CDC.compile(["."], ["-I../../croc-src", "-I../../", "-lib", "-of../" ~ mod.name ~ lib_ext] ~ arguments, null, mod.toString, true);
 		}
 	}
 	

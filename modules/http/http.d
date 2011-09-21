@@ -7,16 +7,15 @@ import lib.util;
 
 import tango.io.Stdout;
 
-static FCGI_Request request;
-
 void http_init(CrocThread* ct)
 {	
 	makeModule(ct, "http", &HttpModule.init);
 }
 
 struct HttpModule
-{	
-	static uword init(CrocThread* t)
+{
+static:
+	uword init(CrocThread* t)
 	{
 		superPush(t, getRequest(t).params);
 		newGlobal(t, "params");
