@@ -1,11 +1,12 @@
 module db;
 
-import lib.util;
-import lib.fcgi;
+import tango.time.Time;
+import Integer = tango.text.convert.Integer;
 
 import croc.api;
 import croc.api_debug;
 import croc.ex_bind;
+import croc.stdlib_time;
 
 import dbi.DBI;
 import dbi.model.Database;
@@ -51,8 +52,45 @@ static:
 	uword fetch(CrocThread* t)
 	{
 		auto inst = getThis(t);
+		auto meta = inst.rowMetadata();
 		
-		return 0;
+		for(uint i = 0; i < inst.fieldCount; i++)
+		{
+			pushField(t, inst, i, meta[i]);
+		}
+		return inst.fieldCount;
+	}
+	
+	uword fetchTable(CrocThread* t)
+	{
+		auto inst = getThis(t);
+		auto meta = inst.rowMetadata();
+		auto slot = getUpval(t, 0);
+		clearTable(t, slot);
+		
+		for(uint i = 0; i < inst.fieldCount; i++)
+		{
+			pushField(t, inst, i, meta[i]);
+			fielda(t, slot, meta[i].name);
+		}
+		
+		return 1;
+	}
+	
+	uword fetchArray(CrocThread* t)
+	{
+		auto inst = getThis(t);
+		auto meta = inst.rowMetadata();
+		auto slot = getUpval(t, 0);
+		lenai(t, slot, inst.fieldCount);
+		
+		for(uint i = 0; i < inst.fieldCount; i++)
+		{
+			pushField(t, inst, i, meta[i]);
+			idxai(t, slot, i);
+		}
+	
+		return 1;
 	}
 	
 	uword rowCount(CrocThread* t)
@@ -124,6 +162,13 @@ static:
 			c.method("constructor", &constructor);
 			c.method("nextRow", &nextRow);
 			c.method("fetch", &fetch);
+			
+			newTable(t);	//pushing upvalue table
+			c.method("fetchTable", &fetchTable, 1);
+			
+			newArray(t, 0);	//pushing upvalue array
+			c.method("fetchArray", &fetchArray, 1);
+			
 			c.method("rowCount", &rowCount);
 			c.method("fieldCount", &fieldCount);
 			c.method("affectedRows", &affectedRows);
@@ -139,6 +184,71 @@ static:
 		
 		setWrappedClass(t, typeid(Result));
 		newGlobal(t, "Result");
+	}
+
+	void pushField(CrocThread* t, Result inst, uint i, FieldInfo info)
+	{
+		switch(info.type)
+		{
+			case BindType.Null:
+				pushNull(t);
+				break;
+			case BindType.Bool:
+				bool field;
+				inst.getField(field, i);
+				pushBool(t, field);
+				break;
+			case BindType.UShort:
+			case BindType.Short:
+				short field;
+				inst.getField(field, i);
+				pushInt(t, field);
+				break;
+			case BindType.UInt:
+			case BindType.Int:
+				int field;
+				inst.getField(field, i);
+				pushInt(t, field);
+				break;
+			case BindType.ULong:
+			case BindType.Long:
+				long field;
+				inst.getField(field, i);
+				pushInt(t, field);
+				break;
+		/*		
+			case BindType.UByte:		
+		*/
+			case BindType.Float:
+				float field;
+				inst.getField(field, i);
+				pushFloat(t, field);
+				break;
+			case BindType.Double:
+				double field;
+				inst.getField(field, i);
+				pushFloat(t, field);
+				break;
+			case BindType.String:
+				char[] field;
+				inst.getField(field, i);
+				pushString(t, field);
+				break;
+			//case Binary:  push memblock here
+			case BindType.Time:
+				Time field;
+				inst.getField(field, i);
+				pushInt(t, (field - Time.epoch1970).seconds);
+				break;
+			case BindType.DateTime:
+				DateTime field;
+				inst.getField(field, i);
+				uword slot = newTable(t);
+				TimeLib.DateTimeToTable(t, field, slot);
+				break;
+			default:
+				throwException(t, "Unsupported BindType: " ~ info.name ~ "=" ~ Integer.toString(info.type));
+		}
 	}
 }
 
