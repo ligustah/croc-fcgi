@@ -43,7 +43,7 @@ static:
 	
 	uword constructor(CrocThread* t)
 	{
-		throwException(t, "Cannot created instances of this class!");
+		throwStdException(t, "Exception", "Cannot created instances of this class!");
 		return 0;
 	}
 	
@@ -264,7 +264,7 @@ static:
 				TimeLib.DateTimeToTable(t, field, slot);
 				break;
 			default:
-				throwException(t, "Unsupported BindType: " ~ info.name ~ "=" ~ Integer.toString(info.type));
+				throwStdException(t, "Exception", "Unsupported BindType: " ~ info.name ~ "=" ~ Integer.toString(info.type));
 		}
 	}
 }
@@ -288,7 +288,7 @@ static:
 			inst = getDatabaseForURL(url);
 		}catch(DBIException dbie)
 		{
-			throwException(t, "{} - {}:{}", dbie.toString, dbie.getSpecificCode, toString(dbie.getErrorCode));
+			throwStdException(t, "Exception", "{} - {}:{}", dbie.toString, dbie.getSpecificCode, toString(dbie.getErrorCode));
 		}
 		
 		pushNativeObj(t, inst);
@@ -469,7 +469,7 @@ static:
 	
 	uword constructor(CrocThread* t)
 	{
-		throwException(t, "not implemented");
+		throwStdException(t, "NotImplementedException", "not implemented");
 		
 		return 0;
 	}
@@ -481,7 +481,7 @@ static:
 		switch(fieldName)
 		{
 			default:
-				throwException(t, "Attempting to access nonexistent field '{}' from type Cookie", fieldName);
+				throwStdException(t, "FieldException", "Attempting to access nonexistent field '{}' from type Cookie", fieldName);
 			case "name":
 				pushString(t, inst.name);
 				break;
@@ -494,7 +494,7 @@ static:
 	
 	uword opFieldAssign(CrocThread* t)
 	{
-		throwException(t, "FieldInfo is read-only!");
+		throwStdException(t, "RuntimeException", "FieldInfo is read-only!");
 		
 		return 0;
 	}
@@ -526,7 +526,7 @@ static:
 	
 	uword constructor(CrocThread* t)
 	{
-		throwException(t, "Not implemented");
+		throwStdException(t, "NotImplementedException", "Not implemented");
 		
 		return 0;
 	}
@@ -538,7 +538,7 @@ static:
 		switch(fieldName)
 		{
 			default:
-				throwException(t, "Attempting to access nonexistent field '{}' from type ColumnInfo", fieldName);
+				throwStdException(t, "FieldException", "Attempting to access nonexistent field '{}' from type ColumnInfo", fieldName);
 			case "name":
 				pushString(t, inst.name);
 				break;
@@ -566,7 +566,7 @@ static:
 	
 	uword opFieldAssign(CrocThread* t)
 	{
-		throwException(t, "ColumnInfo is read-only!");
+		throwStdException(t, "RuntimeException", "ColumnInfo is read-only!");
 		
 		return 0;
 	}

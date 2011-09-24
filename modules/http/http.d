@@ -51,7 +51,7 @@ struct CookieObj
 				inst = new Cookie(name, value);
 			}
 			
-			if(inst is null) throwException(t, "No such constructor");
+			if(inst is null) throwStdException(t, "Exception", "No such constructor");
 			
 			pushNativeObj(t, inst);
 			setExtraVal(t, 0, 0);
@@ -66,7 +66,7 @@ struct CookieObj
 			switch(fieldName)
 			{
 				default:
-					throwException(t, "Attempting to access nonexistent field '{}' from type Cookie", fieldName);
+					throwStdException(t, "FieldException", "Attempting to access nonexistent field '{}' from type Cookie", fieldName);
 				case "name":
 					pushString(t, inst.name);
 					break;
@@ -103,7 +103,7 @@ struct CookieObj
 			switch(fieldName)
 			{
 				default:
-					throwException(t, "Attempting to access nonexistent field '{}' from type Cookie", fieldName);
+					throwStdException(t, "FieldException", "Attempting to access nonexistent field '{}' from type Cookie", fieldName);
 				case "name":
 					inst.name = checkStringParam(t, 2);
 					break;
