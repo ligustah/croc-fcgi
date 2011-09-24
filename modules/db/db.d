@@ -9,6 +9,8 @@ import croc.ex_bind;
 import croc.stdlib_time;
 
 import dbi.DBI;
+import dbi.Exception;
+import dbi.ErrorCode;
 import dbi.model.Database;
 
 public void db_init(CrocThread* t)
@@ -21,6 +23,9 @@ struct DBModule
 static:
 	uword init(CrocThread* t)
 	{
+		BindTypeEnum.init(t);
+		FieldInfoObj.init(t);
+		ColumnInfoObj.init(t);
 		ResultObj.init(t);
 		DatabaseObj.init(t);
 		
@@ -147,11 +152,17 @@ static:
 		auto inst = getThis(t);
 		auto info = inst.rowMetadata();
 		
+		superPush(t, info);
+		
+		/*
+		
 		foreach(row; info)
 		{
 			pushString(t, row.name);
 		}
 		newArrayFromStack(t, info.length);
+		
+		*/
 		return 1;
 	}
 	
@@ -216,9 +227,11 @@ static:
 				inst.getField(field, i);
 				pushInt(t, field);
 				break;
-		/*		
-			case BindType.UByte:		
-		*/
+			case BindType.UByte:
+				ubyte field;
+				inst.getField(field, i);
+				pushInt(t, field);
+				break;
 			case BindType.Float:
 				float field;
 				inst.getField(field, i);
@@ -234,7 +247,11 @@ static:
 				inst.getField(field, i);
 				pushString(t, field);
 				break;
-			//case Binary:  push memblock here
+			case BindType.Binary:
+				ubyte[] data;
+				inst.getField(data, i);
+				memblockFromDArray(t, data);
+				break;
 			case BindType.Time:
 				Time field;
 				inst.getField(field, i);
@@ -266,7 +283,13 @@ static:
 		char[] url = checkStringParam(t, 1);
 		Database inst;
 		
-		inst = safeCode(t, getDatabaseForURL(url));
+		try
+		{
+			inst = getDatabaseForURL(url);
+		}catch(DBIException dbie)
+		{
+			throwException(t, "{} - {}:{}", dbie.toString, dbie.getSpecificCode, toString(dbie.getErrorCode));
+		}
 		
 		pushNativeObj(t, inst);
 		setExtraVal(t, 0, 0);
@@ -333,6 +356,19 @@ static:
 		auto inst = getThis(t);
 		char[] table = checkStringParam(t, 1);
 		pushBool(t, inst.hasTable(table));
+		return 1;
+	}
+	
+	uword getTableInfo(CrocThread* t)
+	{
+		auto inst = getThis(t);
+		char[] table = checkStringParam(t, 1);
+		safeCode(t, superPush(t, inst.getTableInfo(table)));
+		
+		foreach(info; inst.getTableInfo(table))
+		{
+			Stderr.formatln("column: {} type: {}", info.name, info.type);
+		}
 		return 1;
 	}
 	
@@ -406,6 +442,7 @@ static:
 			c.method("rollback", &rollback);
 			c.method("commit", &commit);
 			c.method("hasTable", &hasTable);
+			c.method("getTableInfo", &getTableInfo);
 			c.method("type", &type);
 			c.method("initQuery", &initQuery);
 			c.method("initInsert", &initInsert);
@@ -419,5 +456,198 @@ static:
 		
 		setWrappedClass(t, typeid(Database));
 		newGlobal(t, "Database");
+	}
+}
+
+struct FieldInfoObj
+{
+static:
+	private FieldInfo* getThis(CrocThread* t)
+	{
+		return &(cast(StructWrapper!(FieldInfo))getNativeObj(t, getExtraVal(t, 0, 0))).inst;
+	}
+	
+	uword constructor(CrocThread* t)
+	{
+		throwException(t, "not implemented");
+		
+		return 0;
+	}
+	
+	uword opField(CrocThread* t)
+	{
+		auto inst = getThis(t);
+		char[] fieldName = checkStringParam(t, 1);
+		switch(fieldName)
+		{
+			default:
+				throwException(t, "Attempting to access nonexistent field '{}' from type Cookie", fieldName);
+			case "name":
+				pushString(t, inst.name);
+				break;
+			case "type":
+				pushInt(t, cast(ubyte)inst.type);
+				break;
+		}
+		return 1;
+	}
+	
+	uword opFieldAssign(CrocThread* t)
+	{
+		throwException(t, "FieldInfo is read-only!");
+		
+		return 0;
+	}
+	
+	void init(CrocThread* t)
+	{
+		CreateClass(t, "FieldInfo", (CreateClass* c)
+		{
+			c.method("constructor", &constructor);
+			c.method("opFieldAssign", &opFieldAssign);
+			c.method("opField", &opField);
+		});
+		
+		newFunction(t, &BasicClassAllocator!(1, 0), "FieldInfo.allocator");
+		setAllocator(t, -2);
+		
+		setWrappedClass(t, typeid(FieldInfo));
+		newGlobal(t, "FieldInfo");
+	}
+}
+
+struct ColumnInfoObj
+{
+static:
+	private ColumnInfo* getThis(CrocThread* t)
+	{
+		return &(cast(StructWrapper!(ColumnInfo))getNativeObj(t, getExtraVal(t, 0, 0))).inst;
+	}
+	
+	uword constructor(CrocThread* t)
+	{
+		throwException(t, "Not implemented");
+		
+		return 0;
+	}
+	
+	uword opField(CrocThread* t)
+	{
+		auto inst = getThis(t);
+		char[] fieldName = checkStringParam(t, 1);
+		switch(fieldName)
+		{
+			default:
+				throwException(t, "Attempting to access nonexistent field '{}' from type ColumnInfo", fieldName);
+			case "name":
+				pushString(t, inst.name);
+				break;
+			case "type":
+				pushInt(t, cast(ubyte)inst.type);
+				break;
+			case "notNull":
+				pushBool(t, inst.notNull);
+				break;
+			case "autoIncrement":
+				pushBool(t, inst.autoIncrement);
+				break;
+			case "primaryKey":
+				pushBool(t, inst.primaryKey);
+				break;
+			case "limit":
+				pushInt(t, inst.limit);
+				break;
+			case "uniqueKey":
+				pushBool(t, inst.uniqueKey);
+				break;
+		}
+		return 1;
+	}
+	
+	uword opFieldAssign(CrocThread* t)
+	{
+		throwException(t, "ColumnInfo is read-only!");
+		
+		return 0;
+	}
+	
+	void init(CrocThread* t)
+	{
+		CreateClass(t, "ColumnInfo", (CreateClass* c)
+		{
+			c.method("constructor", &constructor);
+			c.method("opField", &opField);
+			c.method("opFieldAssign", &opFieldAssign);
+		});
+		
+		newFunction(t, &BasicClassAllocator!(1, 0), "ColumInfo.allocator");
+		setAllocator(t, -2);
+		
+		setWrappedClass(t, typeid(ColumnInfo));
+		newGlobal(t, "ColumnInfo");
+	}
+}
+
+import tango.io.Stdout;
+
+struct BindTypeEnum
+{
+static:
+	private char[][BindType] typeToString;
+	uword toString(CrocThread* t)
+	{
+		BindType type = cast(BindType)checkIntParam(t, 1);
+		Stderr.formatln("got {}", checkIntParam(t, 1));
+		if((type in typeToString) !is null)
+			pushString(t, typeToString[type]);
+		else pushString(t, "invalid");
+		return 1;
+	}
+	
+	void init(CrocThread* t)
+	{
+		newNamespace(t, "BindType");
+		
+		pushInt(t, cast(ubyte)BindType.Null); fielda(t, -2, "Null");
+		pushInt(t, cast(ubyte)BindType.Bool); fielda(t, -2, "Bool");
+		pushInt(t, cast(ubyte)BindType.Byte); fielda(t, -2, "Byte");
+		pushInt(t, cast(ubyte)BindType.Short); fielda(t, -2, "Short");
+		pushInt(t, cast(ubyte)BindType.Int); fielda(t, -2, "Int");
+		pushInt(t, cast(ubyte)BindType.Long); fielda(t, -2, "Long");
+		pushInt(t, cast(ubyte)BindType.UByte); fielda(t, -2, "UByte");
+		pushInt(t, cast(ubyte)BindType.UShort); fielda(t, -2, "UShort");
+		pushInt(t, cast(ubyte)BindType.UInt); fielda(t, -2, "UInt");
+		pushInt(t, cast(ubyte)BindType.ULong); fielda(t, -2, "ULong");
+		pushInt(t, cast(ubyte)BindType.Float); fielda(t, -2, "Float");
+		pushInt(t, cast(ubyte)BindType.Double); fielda(t, -2, "Double");
+		pushInt(t, cast(ubyte)BindType.String); fielda(t, -2, "String");
+		pushInt(t, cast(ubyte)BindType.Binary); fielda(t, -2, "Binary");
+		pushInt(t, cast(ubyte)BindType.Time); fielda(t, -2, "Time");
+		pushInt(t, cast(ubyte)BindType.DateTime); fielda(t, -2, "DateTime");
+		
+		newFunction(t, &toString, "BindType.toString", 0);
+		fielda(t, -2, "toString");
+		
+		newGlobal(t, "BindType");
+		
+		with(BindType)
+		{
+			typeToString[Null] = "Null";
+			typeToString[Bool] = "Bool";
+			typeToString[Byte] = "Byte";
+			typeToString[Short] = "Short";
+			typeToString[Int] = "Int";
+			typeToString[Long] = "Long";
+			typeToString[UByte] = "UByte";
+			typeToString[UShort] = "UShort";
+			typeToString[UInt] = "UInt";
+			typeToString[ULong] = "ULong";
+			typeToString[Float] = "Float";
+			typeToString[Double] = "Double";
+			typeToString[String] = "String";
+			typeToString[Binary] = "Binary";
+			typeToString[Time] = "Time";
+			typeToString[DateTime] = "DateTime";
+		}
 	}
 }

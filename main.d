@@ -30,7 +30,7 @@ void main()
 		{
 			runFile(t, r.params["SCRIPT_FILENAME"]);
 		}
-		catch(CrocException e)
+		catch(Exception e)
 		{
 			Stdout(e).newline;
 		}
