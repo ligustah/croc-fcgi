@@ -11,6 +11,8 @@ import croc.ex_bind;
 
 import enabled_modules;
 
+import tango.core.tools.TraceExceptions;
+
 void main()
 {
 	FCGI_Request r;
@@ -32,7 +34,16 @@ void main()
 		}
 		catch(Exception e)
 		{
-			Stdout(e).newline;
+			void sink(char[] msg)
+			{
+				Stdout(msg);
+			}
+			sink(e.toString);
+			if(e.info)
+			{
+				sink("\r\n");
+				e.info.writeOut(&sink);
+			}
 		}
 		
 		closeVM(&vm);

@@ -122,10 +122,10 @@ import Integer = tango.text.convert.Integer;
  * to use this file as a generic build script like bud or rebuild. */
 int main(string[] args)
 {
-	char[][] defaultArgs = ["-Icroc-src", "-debug"];
+	char[][] defaultArgs = ["-Icroc-src", "-debug", "-g"];
 	if (!FS.exists("lib/croc" ~ lib_ext))
 	{
-		CDC.compile(["croc-src/croc"], ["-lib", "-oflib/croc" ~ lib_ext]);
+		CDC.compile(["croc-src/croc"], ["-lib", "-debug", "-g", "-oflib/croc" ~ lib_ext]);
 	}
 	
 	auto modules = compileModules();
@@ -242,7 +242,7 @@ char[][] compileModules()
 			}
 			
 			//one command to rule them all!
-			CDC.compile(["."], ["-debug", "-I../../croc-src", "-I../../", "-lib", "-of../" ~ mod.name ~ lib_ext] ~ arguments, null, mod.toString, true);
+			CDC.compile(["."], ["-debug", "-g", "-I../../croc-src", "-I../../", "-lib", "-of../" ~ mod.name ~ lib_ext] ~ arguments, null, mod.toString, true);
 		}
 	}
 	
