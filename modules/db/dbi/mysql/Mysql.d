@@ -8,6 +8,7 @@ version (dbi_mysql) {
 
 import tango.stdc.stringz : toDString = fromStringz, toCString = toStringz;
 import TextUtil = tango.text.Util;
+import Ascii = tango.text.Ascii;
 import Integer = tango.text.convert.Integer;
 import Float = tango.text.convert.Float;
 import tango.time.Time;
@@ -577,15 +578,36 @@ class Mysql : Database {
 		
 		while(this.nextRow) {
 			ColumnInfo col;
-			char[] keyCol;
+			char[] buf;
 			getField(col.name, 0);
-			getField(keyCol,3);
-			if(keyCol == "PRI") col.primaryKey = true;
+			getField(buf,3);
+			if(buf == "PRI") col.primaryKey = true;
+			
+			getField(buf, 1);
+			col.type = typeToBindType(buf);
 			info ~= col;
 		}
 		
 		closeResult;
 		return info;
+	}
+	
+	private BindType typeToBindType(char[] type)
+	{
+		if(Ascii.isearch(type, "varchar") != type.length)
+		{
+			return BindType.String;
+		}
+		else if(Ascii.isearch(type, "int") != type.length)
+		{
+			return Ascii.isearch(type, "unsigned") == type.length ? BindType.Int : BindType.UInt;
+		}
+		else if(Ascii.isearch(type, "blob") != type.length)
+		{
+			return BindType.Binary;
+		}
+		else
+			return BindType.Null;
 	}
 	
 	char[] type() { return "Mysql"; }
