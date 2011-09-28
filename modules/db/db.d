@@ -23,11 +23,25 @@ struct DBModule
 static:
 	uword init(CrocThread* t)
 	{
-		BindTypeEnum.init(t);
-		FieldInfoObj.init(t);
-		ColumnInfoObj.init(t);
-		ResultObj.init(t);
-		DatabaseObj.init(t);
+		void sink(char[] msg)
+		{
+			Stdout(msg).flush;
+		}
+		
+		try
+		{
+			BindTypeEnum.init(t);
+			FieldInfoObj.init(t);
+			ColumnInfoObj.init(t);
+			ResultObj.init(t);
+			DatabaseObj.init(t);
+		}catch(CrocException e)
+		{
+			catchException(t);
+			pop(t);
+			if(e.info)
+				e.info.writeOut(&sink);
+		}
 		
 		return 0;
 	}
@@ -277,6 +291,50 @@ static:
 		return cast(Database)getNativeObj(t, getExtraVal(t, 0, 0));
 	}
 	
+	void setParam(CrocThread* t, word slot)
+	{
+		auto inst = getThis(t);
+		auto type = .type(t, slot);
+		
+		with(CrocValue.Type)
+		{
+			switch(type)
+			{
+				case Null:
+					inst.setParamNull();
+					break;
+				case Bool:
+					inst.setParam(getBool(t, slot));
+					break;
+				case Int:
+					inst.setParam(getInt(t, slot));
+					break;
+				case Float:
+					inst.setParam(getFloat(t, slot));
+					break;
+				case Char:
+					char[1] buf;
+					buf[0] = getChar(t, slot);
+					inst.setParam(buf);
+					break;
+				case String:
+					inst.setParam(getString(t, slot));
+					break;
+				/*
+				case Table:
+				case Array:
+				*/
+				case Memblock:
+					inst.setParam(cast(ubyte[])getMemblockData(t, slot));
+					break;
+				default:
+					throwStdException(t, "NotImplementedException", "Cannot pass type {}", type);
+					break;
+
+			}
+		}
+	}
+	
 	uword constructor(CrocThread* t)
 	{
 		checkInstParam(t, 0, "Database");
@@ -300,10 +358,24 @@ static:
 	
 	uword query(CrocThread* t)
 	{
+		auto numParams = stackSize(t) - 1;
 		auto inst = getThis(t);
 		char[] qry = checkStringParam(t, 1);
 		
-		inst.query(qry);
+		if(numParams == 1)
+		{
+			inst.query(qry);
+		}
+		else
+		{
+			inst.initQuery(qry, true);
+			Stdout.formatln("pushing {} params", numParams - 1);
+			for(word slot = 2; slot <= numParams; slot++)
+			{
+				setParam(t, slot);
+			}
+			inst.doQuery();
+		}
 		
 		return 0;
 	}
@@ -364,11 +436,6 @@ static:
 		auto inst = getThis(t);
 		char[] table = checkStringParam(t, 1);
 		safeCode(t, superPush(t, inst.getTableInfo(table)));
-		
-		foreach(info; inst.getTableInfo(table))
-		{
-			Stderr.formatln("column: {} type: {}", info.name, info.type);
-		}
 		return 1;
 	}
 	
@@ -597,7 +664,6 @@ static:
 	uword toString(CrocThread* t)
 	{
 		BindType type = cast(BindType)checkIntParam(t, 1);
-		Stderr.formatln("got {}", checkIntParam(t, 1));
 		if((type in typeToString) !is null)
 			pushString(t, typeToString[type]);
 		else pushString(t, "invalid");
