@@ -12,6 +12,7 @@ import dbi.DBI;
 import dbi.Exception;
 import dbi.ErrorCode;
 import dbi.model.Database;
+import dbi.util.VirtualPrepare;
 
 public void db_init(CrocThread* t)
 {
@@ -328,11 +329,28 @@ static:
 					inst.setParam(cast(ubyte[])getMemblockData(t, slot));
 					break;
 				default:
-					throwStdException(t, "NotImplementedException", "Cannot pass type {}", type);
+					pushToString(t, slot);
+					throwStdException(t, "NotImplementedException", "Cannot pass value {} at slot {}", getString(t, -1), slot);
 					break;
 
 			}
 		}
+	}
+	
+	void setParams(CrocThread* t, word start)
+	{
+		auto numParams = stackSize(t) - 1;
+		for(word slot = start; slot < numParams; slot++)
+		{
+			setParam(t, slot);
+		}
+	}
+	
+	uword setParam(CrocThread* t)
+	{
+		checkAnyParam(t, 1);
+		setParam(t, 1);
+		return 0;
 	}
 	
 	uword constructor(CrocThread* t)
@@ -369,15 +387,83 @@ static:
 		else
 		{
 			inst.initQuery(qry, true);
-			Stdout.formatln("pushing {} params", numParams - 1);
-			for(word slot = 2; slot <= numParams; slot++)
-			{
-				setParam(t, slot);
-			}
+			setParams(t, 2);
 			inst.doQuery();
 		}
 		
-		return 0;
+		return 0; //maybe return rowCount here?
+	}
+	
+	uword insert(CrocThread* t)
+	{
+		auto numParams = stackSize(t) - 1;
+		auto inst = getThis(t);
+		char[] table = checkStringParam(t, 1);
+		char[][] fields = superGet!(char[][])(t, 2);
+		
+		auto remaining = numParams - 2;
+		
+		if(fields.length != remaining)
+			throwStdException(t, "ApiError", "Passed params don't match fields");
+		
+		inst.initInsert(table, fields);
+		setParams(t, 3);
+		inst.doQuery();
+		
+		return 0; //maybe return lastInsertID here?
+	}
+	
+	uword update(CrocThread* t)
+	{
+		auto numParams = stackSize(t) - 1;
+		auto inst = getThis(t);
+		char[] table = checkStringParam(t, 1);
+		char[][] fields = superGet!(char[][])(t, 2);
+		char[] where = checkStringParam(t, 3);
+		
+		auto remaining = numParams - 3;
+		
+		if(fields.length + getParamIndices(where).length != remaining)
+			throwStdException(t, "ApiError", "Passed params don't match fields");
+		
+		inst.initUpdate(table, fields, where);
+		setParams(t, 4);
+		inst.doQuery();
+		
+		return 0; //maybe return affectedRows here?
+	}	
+	
+	uword select(CrocThread* t)
+	{
+		auto numParams = stackSize(t) - 1;
+		auto inst = getThis(t);
+		char[] table = checkStringParam(t, 1);
+		char[][] fields = superGet!(char[][])(t, 2);
+		char[] where = checkStringParam(t, 3);
+		
+		auto remaining = numParams - 3;
+		
+		inst.initSelect(table, fields, where, remaining > 0);
+		setParams(t, 4);
+		inst.doQuery();
+		
+		return 0; //maybe return rowCount here?
+	}
+		
+	uword remove(CrocThread* t)
+	{
+		auto numParams = stackSize(t) - 1;
+		auto inst = getThis(t);
+		char[] table = checkStringParam(t, 1);
+		char[] where = checkStringParam(t, 2);
+		
+		auto remaining = numParams - 2;
+		
+		inst.initRemove(table, where, remaining > 0);
+		setParams(t, 3);
+		inst.doQuery();
+	
+		return 0; //maybe return affectedRows here
 	}
 	
 	uword lastInsertID(CrocThread* t)
@@ -490,8 +576,15 @@ static:
 		auto inst = getThis(t);
 		char[] table = checkStringParam(t, 1);
 		char[] where = checkStringParam(t, 2);
-		bool haveParams = superGet!(bool)(t, 3);
+		bool haveParams = checkBoolParam(t, 3);
 		inst.initRemove(table, where, haveParams);
+		return 0;
+	}
+	
+	uword doQuery(CrocThread* t)
+	{
+		auto inst = getThis(t);
+		inst.doQuery();
 		return 0;
 	}
 	
@@ -501,6 +594,10 @@ static:
 		{
 			c.method("constructor", &constructor);
 			c.method("query", &query);
+			c.method("insert", &insert);
+			c.method("update", &update);
+			c.method("select", &select);
+			c.method("remove", &remove);
 			c.method("lastInsertID", &lastInsertID);
 			c.method("close", &close);
 			c.method("escapeString", &escapeString);
@@ -516,6 +613,8 @@ static:
 			c.method("initUpdate", &initUpdate);
 			c.method("initSelect", &initSelect);
 			c.method("initRemove", &initRemove);
+			c.method("doQuery", &doQuery);
+			c.method("setParam", &setParam);
 		});
 		
 		newFunction(t, &BasicClassAllocator!(1, 0), "Database.allocator");
