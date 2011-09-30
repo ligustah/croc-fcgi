@@ -6,6 +6,7 @@ import lib.fcgi;
 import lib.util;
 
 import tango.io.Stdout;
+import tango.io.device.Array;
 
 import tango.net.http.HttpCookies;
 
@@ -21,8 +22,31 @@ static:
 	{
 		superPush(t, getRequest(t).params);
 		newGlobal(t, "params");
+		CookieObj.init(t);
+		parseCookies(t);
 		
 		return 0;
+	}
+	
+	private void parseCookies(CrocThread* t)
+	{
+		auto p = getRequest(t).params;
+		auto tab = newTable(t);
+		
+		if("HTTP_COOKIE" in p)
+		{
+			auto stack = new CookieStack(10);
+			auto parser = new CookieParser(stack);
+			parser.parse(p["HTTP_COOKIE"]);
+			
+			foreach(cookie; stack)
+			{
+				superPush(t, cookie);
+				fielda(t, tab, cookie.name, true);
+			}
+		}
+		
+		newGlobal(t, "cookies");
 	}
 }
 
@@ -132,7 +156,18 @@ struct CookieObj
 			
 			return 0;
 		}
-
+		
+		uword toString(CrocThread* t)
+		{
+			auto a = new Array(64, 64);
+			auto inst = getThis(t);
+			
+			inst.produce(&a.write);
+			
+			pushString(t, cast(char[])a.slice);
+			
+			return 1;
+		}
 		
 		uword init(CrocThread* t)
 		{
@@ -141,6 +176,7 @@ struct CookieObj
 				c.method("constructor", &constructor);
 				c.method("opField", &opField);
 				c.method("opFieldAssign", &opFieldAssign);
+				c.method("toString", &toString);
 				
 			});
 			newFunction(t, &BasicClassAllocator!(1, 0), "Cookie.allocator");
