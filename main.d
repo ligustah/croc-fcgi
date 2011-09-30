@@ -30,7 +30,7 @@ void main()
 		
 		try
 		{
-			runFile(t, r.params["SCRIPT_FILENAME"]);
+			runFile(t, r.env["SCRIPT_FILENAME"]);
 		}
 		catch(Exception e)
 		{

@@ -20,8 +20,8 @@ struct HttpModule
 static:
 	uword init(CrocThread* t)
 	{
-		superPush(t, getRequest(t).params);
-		newGlobal(t, "params");
+		superPush(t, getRequest(t).env);
+		newGlobal(t, "env");
 		CookieObj.init(t);
 		parseCookies(t);
 		
@@ -30,7 +30,7 @@ static:
 	
 	private void parseCookies(CrocThread* t)
 	{
-		auto p = getRequest(t).params;
+		auto p = getRequest(t).env;
 		auto tab = newTable(t);
 		
 		if("HTTP_COOKIE" in p)
