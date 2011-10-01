@@ -4,6 +4,7 @@ import lib.fcgi;
 import lib.util;
 
 import tango.io.Stdout;
+import tango.io.device.Array;
 
 import croc.api;
 import croc.ex;
@@ -24,19 +25,20 @@ void main()
 	
 	while(FCGX.accept(r, true) >= 0)
 	{
-		Stdout("Content-Type: text/plain").newline.newline;
-		pushRequest(t, r);
-		initModules(t);
-		
 		try
 		{
+			pushRequest(t, r);
+			initModules(t);
+		
 			runFile(t, r.env["SCRIPT_FILENAME"]);
+			r.finish();
 		}
 		catch(Exception e)
 		{
+			auto a = new Array(128, 128);
 			void sink(char[] msg)
 			{
-				Stdout(msg);
+				a.write(msg);
 			}
 			sink(e.toString);
 			if(e.info)
@@ -44,6 +46,7 @@ void main()
 				sink("\r\n");
 				e.info.writeOut(&sink);
 			}
+			Stdout(cast(char[])a.slice);
 		}
 		
 		closeVM(&vm);
