@@ -65,33 +65,26 @@ static:
 	{
 		superPush(t, getRequest(t).env);   newGlobal(t, "env");
 		CookieObj.init(t);
-		parseCookies(t);
+		getCookies(t);
 		HttpEnums.init(t);
 		
 		newFunction(t, &addCookie, "addCookie", 0);   				newGlobal(t, "addCookie");
 		newFunction(t, &addHeader, "addHeader", 0);  				newGlobal(t, "addHeader");
 		newFunction(t, &setResponseCode, "setResponseCode", 0);		newGlobal(t, "setResponseCode");
-		newFunction(t, &redirect, "redirect", 0);		newGlobal(t, "redirect");
+		newFunction(t, &redirect, "redirect", 0);					newGlobal(t, "redirect");
 		
 		return 0;
 	}
 	
-	private void parseCookies(CrocThread* t)
+	private void getCookies(CrocThread* t)
 	{
-		auto p = getRequest(t).env;
+		auto c = getRequest(t).cookies;
 		auto tab = newTable(t);
 		
-		if("HTTP_COOKIE" in p)
+		foreach(name, cookie; c)
 		{
-			auto stack = new CookieStack(10);
-			auto parser = new CookieParser(stack);
-			parser.parse(p["HTTP_COOKIE"]);
-			
-			foreach(cookie; stack)
-			{
-				superPush(t, cookie);
-				fielda(t, tab, cookie.name, true);
-			}
+			superPush(t, cookie);
+			fielda(t, tab, name, true);
 		}
 		
 		newGlobal(t, "cookies");
