@@ -12,9 +12,9 @@ import tango.net.http.HttpCookies;
 import tango.net.http.HttpHeaders;
 import tango.net.http.HttpConst;
 
-void http_init(CrocThread* ct)
+void http_init(CrocThread* t)
 {	
-	makeModule(ct, "http", &HttpModule.init);
+	makeModule(t, "http", &HttpModule.init);
 }
 
 struct HttpModule
@@ -22,8 +22,22 @@ struct HttpModule
 static:
 	uword addCookie(CrocThread* t)
 	{
-		checkInstParam(t, 1, "Cookie");
-		auto c = superGet!(Cookie)(t, 1);
+		auto numParams = stackSize(t) - 1;
+		Cookie c;
+		if(numParams == 1)
+		{
+			checkInstParam(t, 1, "Cookie");
+			c = superGet!(Cookie)(t, 1);
+		}
+		else if(numParams == 2)
+		{
+			char[] name = checkStringParam(t, 1);
+			char[] value = checkStringParam(t, 2);
+			c = new Cookie(name, value);
+		}
+		
+		if(c == null)	throwStdException(t, "ParamTypeError", "need an instance of Cookie or two strings");
+		
 		auto req = getRequest(t);
 		
 		req.addCookie(c);
