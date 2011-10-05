@@ -36,7 +36,7 @@ static:
 			c = new Cookie(name, value);
 		}
 		
-		if(c == null)	throwStdException(t, "ParamTypeError", "need an instance of Cookie or two strings");
+		if(c is null)	throwStdException(t, "ParamTypeError", "need an instance of Cookie or two strings");
 		
 		auto req = getRequest(t);
 		
