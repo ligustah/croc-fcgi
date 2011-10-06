@@ -11,6 +11,7 @@ import tango.io.device.Array;
 import tango.net.http.HttpCookies;
 import tango.net.http.HttpHeaders;
 import tango.net.http.HttpConst;
+import tango.net.http.HttpParams;
 
 void http_init(CrocThread* t)
 {	
@@ -78,6 +79,8 @@ static:
 	uword init(CrocThread* t)
 	{
 		superPush(t, getRequest(t).env);   newGlobal(t, "env");
+		getParams(t);
+		postParams(t);
 		CookieObj.init(t);
 		getCookies(t);
 		HttpEnums.init(t);
@@ -102,6 +105,34 @@ static:
 		}
 		
 		newGlobal(t, "cookies");
+	}
+	
+	private void getParams(CrocThread* t)
+	{
+		auto p = getRequest(t).GETParams;
+		auto tab = newTable(t);
+		
+		foreach(token; p)
+		{
+			pushString(t, token.value);
+			fielda(t, tab, token.name, true);
+		}
+		
+		newGlobal(t, "get");
+	}
+
+	private void postParams(CrocThread* t)
+	{
+		auto p = getRequest(t).POSTParams;
+		auto tab = newTable(t);
+
+		foreach(token; p)
+		{
+			pushString(t, token.value);
+			fielda(t, tab, token.name, true);
+		}
+
+		newGlobal(t, "post");
 	}
 }
 
