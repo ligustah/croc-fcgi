@@ -18,7 +18,16 @@ import tango.net.http.HttpCookies;
 import tango.net.http.HttpConst;
 import tango.net.http.HttpParams;
 
+import tango.util.log.Log;
+
 import Integer = tango.text.convert.Integer;
+
+private Logger log;
+
+static this()
+{
+	log = Log.lookup("fcgi");
+}
 
 version(Windows)
 {
@@ -63,7 +72,12 @@ class FCGI_InputStream : InputStream
 	
 	size_t read(void[] dst)
 	{
-		return FCGX_GetStr(cast(char*)dst.ptr, dst.length, _inStream);
+		log.trace("attempting to read {} bytes", dst.length);
+		auto len = FCGX_GetStr(cast(char*)dst.ptr, dst.length, _inStream);
+		log.trace("{} bytes read", len);
+		
+		//return Eof if len == 0 (hacky?)
+		return len == 0 ? IOStream.Eof : len;
 	}
 	
 	void[] load(size_t max = -1)
@@ -271,6 +285,8 @@ class FCGI_Request
 		{
 			_env = Environment.get();
 		}
+		
+		log.trace("got {} env params", _env.length);
 	}
 	
 	public InputStream input()
@@ -356,11 +372,14 @@ class FCGI_Request
 			{
 				_inCookies[cookie.name] = cookie;
 			}
+			
+			log.trace("parsed {} cookies", _inCookies.length);
 		}
 		
 		if("QUERY_STRING" in _env)
 		{
 			_getParams.parse(new Array(_env["QUERY_STRING"]));
+			log.trace("parsed {} GET params", _getParams.size);
 		}
 
 		
@@ -368,10 +387,17 @@ class FCGI_Request
 		if("REQUEST_METHOD" in _env && _env["REQUEST_METHOD"] == "POST")
 		{
 			int len = Integer.parse(_env["CONTENT_LENGTH"]);
-			Stderr.format("CONTENT_LENGTH: {}", len).flush;
+			log.trace("CONTENT_LENGTH: {}", len);
+			log.trace("CONTENT_TYPE: {}", _env["CONTENT_TYPE"]);
+			
+			/*
 			void[] data = _in.load(len);
 			
 			 _postParams.parse(new Array(data));
+			 */
+			 
+			 _postParams.parse(new Bin(_in));
+			 log.trace("parsed {} POST params", _postParams.size);
 		}
 	}
 	
@@ -457,9 +483,3 @@ private class HttpPostParams : HttpParams
 		}
 	}
 }
-
-
-
-
-
-
