@@ -12,6 +12,7 @@ import tango.core.Array;
 import tango.sys.Environment;
 
 import tango.stdc.stringz;
+import stdio = tango.stdc.stdio;
 
 import tango.net.http.HttpHeaders;
 import tango.net.http.HttpCookies;
@@ -72,12 +73,13 @@ class FCGI_InputStream : InputStream
 	
 	size_t read(void[] dst)
 	{
-		log.trace("attempting to read {} bytes", dst.length);
+		if(FCGX_HasSeenEOF(_inStream) == stdio.EOF)
+		{
+			return IOStream.Eof;
+		}
 		auto len = FCGX_GetStr(cast(char*)dst.ptr, dst.length, _inStream);
-		log.trace("{} bytes read", len);
 		
-		//return Eof if len == 0 (hacky?)
-		return len == 0 ? IOStream.Eof : len;
+		return len;
 	}
 	
 	void[] load(size_t max = -1)
