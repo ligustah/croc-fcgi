@@ -13,6 +13,15 @@ import tango.net.http.HttpHeaders;
 import tango.net.http.HttpConst;
 import tango.net.http.HttpParams;
 
+import tango.util.log.Log;
+
+private Logger log;
+
+static this()
+{
+	log = Log.lookup("mod_http");
+}
+
 void http_init(CrocThread* t)
 {	
 	makeModule(t, "http", &HttpModule.init);

@@ -20,26 +20,31 @@ import enabled_modules;
 
 import tango.core.tools.TraceExceptions;
 
+private Logger log;
+
+static this()
+{
+	//set up logging
+	auto fp = FilePath(getExePath());
+	fp.pop();
+	fp.append("error.log");
+	
+	if(!fp.exists())
+	{
+		auto f = new File(fp.toString, File.ReadWriteCreate);
+		f.close();
+	}
+	
+	//log to exe-path/error.log
+	Log.root.add(new AppendFile(fp.toString, new LayoutDate()));
+	Log.root.level = Level.Trace;
+	
+	log = Log.lookup("main");
+}
+
 void main(char[][] args)
 {	try
 	{
-		//set up logging
-		auto fp = FilePath(getExePath());
-		fp.pop();
-		fp.append("error.log");
-		
-		if(!fp.exists())
-		{
-			auto f = new File(fp.toString, File.ReadWriteCreate);
-			f.close();
-		}
-		
-		//log to exe-path/error.log
-		Log.root.add(new AppendFile(fp.toString, new LayoutDate()));
-		Log.root.level = Level.Trace;
-		
-		auto log = Log.lookup("main");
-		
 		log.info("starting croc-fcgi");
 
 		FCGI_Request r;
@@ -64,7 +69,7 @@ void main(char[][] args)
 	}
 	catch(Exception e)
 	{
-		auto f = new File("C:\\Users\\Andre\\Documents\\croc-fcgi\\crash.log", File.ReadWriteCreate);
+		auto f = new File(getExeDir().append("crash.log").toString, File.ReadWriteCreate);
 		void sink(char[] msg)
 		{
 			   f.write(msg);

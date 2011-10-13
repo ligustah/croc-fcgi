@@ -1,7 +1,10 @@
 module lib.fcgi;
 
+import lib.util;
+
 import tango.io.device.Conduit;
 import tango.io.device.Array;
+import tango.io.device.File;
 import tango.io.Stdout;
 import tango.io.stream.Format;
 import tango.io.stream.Buffered;
@@ -22,6 +25,7 @@ import tango.net.http.HttpParams;
 import tango.util.log.Log;
 
 import Integer = tango.text.convert.Integer;
+import Ascii = tango.text.Ascii;
 
 private Logger log;
 
@@ -270,7 +274,7 @@ class FCGI_Request
 		this._err = new FCGI_OutputStream(error);
 		this._headers = new HttpHeaders();
 		this._getParams = new HttpParams();
-		this._postParams = new HttpPostParams(this);
+		this._postParams = new HttpParams();
 		this._cookies = new HttpCookies(_headers);
 		
 		if(env != null)
@@ -384,21 +388,27 @@ class FCGI_Request
 			log.trace("parsed {} GET params", _getParams.size);
 		}
 
-		
 		//TODO: check for content type here and do not load multi parts into memory
 		if("REQUEST_METHOD" in _env && _env["REQUEST_METHOD"] == "POST")
 		{
 			int len = Integer.parse(_env["CONTENT_LENGTH"]);
+			char[] type = _env["CONTENT_TYPE"];
+			Ascii.toLower(type);
 			log.trace("CONTENT_LENGTH: {}", len);
-			log.trace("CONTENT_TYPE: {}", _env["CONTENT_TYPE"]);
+			log.trace("CONTENT_TYPE: {}", type);
 			
-			/*
-			void[] data = _in.load(len);
-			
-			 _postParams.parse(new Array(data));
-			 */
+			switch(type)
+			{
+				case "application/x-www-form-urlencoded":
+					_postParams.parse(cast(char[])_in.load(len));
+					break;
+				default:
+					log.warn("unknown form data encoding: {}, dumping data", type);
+					scope f = new File(getExeDir().append("form_data.txt").toString, File.ReadWriteCreate);
+					f.copy(_in, len);
+					break;
+			}
 			 
-			 _postParams.parse(new Bin(_in));
 			 log.trace("parsed {} POST params", _postParams.size);
 		}
 	}
@@ -458,30 +468,5 @@ struct FCGX
 	)
 	{
 		return FCGX_Accept(stdin, stdout, stderr, envp);
-	}
-}
-
-
-/**
-	This class takes care of extracting information from the HTTP request body
-*/
-private class HttpPostParams : HttpParams
-{
-	private FCGI_Request _req;
-	
-	this(FCGI_Request req)
-	{
-		this._req = req;
-	}
-	
-	void parse(InputBuffer input)
-	{
-		char[] type = _req.env["CONTENT_TYPE"];
-		
-		if(type == "application/x-www-form-urlencoded")
-		{
-			//we got some plain old post data
-			super.parse(input);
-		}
 	}
 }

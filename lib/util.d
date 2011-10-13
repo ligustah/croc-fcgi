@@ -5,6 +5,8 @@ import croc.ex;
 
 import lib.fcgi;
 
+import tango.io.FilePath;
+
 public void pushRequest(CrocThread* t, FCGI_Request r)
 {
 	pushNativeObj(t, r);
@@ -13,7 +15,22 @@ public void pushRequest(CrocThread* t, FCGI_Request r)
 
 public FCGI_Request getRequest(CrocThread* t)
 {
-	return cast(FCGI_Request) getNativeObj(t, getRegistryVar(t, "fcgi.request"));
+	auto r =  cast(FCGI_Request) getNativeObj(t, getRegistryVar(t, "fcgi.request"));
+	pop(t);
+	return r;
+}
+
+public Type getRegistryObject(Type)(CrocThread* t, char[] key)
+{
+	auto o =  cast(Type) getNativeObj(t, getRegistryVar(t, key));
+	pop(t);
+	return o;
+}
+
+public void pushRegistryObject(CrocThread* t, char[] key, Object value)
+{
+	pushNativeObj(t, value);
+	setRegistryVar(t, key);
 }
 
 version(Windows)
@@ -62,3 +79,7 @@ else
 	static assert(0, "getExePath not supported on this platform");
 }
 
+FilePath getExeDir()
+{
+	return FilePath(getExePath()).pop();
+}
