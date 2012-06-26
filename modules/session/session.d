@@ -33,6 +33,14 @@ version(Windows)
 else version(linux)
 {
 	import tango.sys.linux.linux;
+	import tango.sys.consts.fcntl;
+	
+	enum
+	{
+		SEEK_SET = 0,
+		SEEK_CUR = 1,
+		SEEK_END = 2
+	}
 }
 
 void session_init(CrocThread* t)
@@ -305,17 +313,36 @@ class LockedFile : File
 	{
 		private void _release()
 		{
-			flock(super.fileHandle, LOCK_UN);
+			//flock(super.fileHandle, LOCK_UN);
+			flock f = 
+			{
+				F_UNLCK,
+				SEEK_SET,
+				0,
+				0				
+			};
+			fcntl(super.fileHandle, F_SETLK, &f);
 		}
 		
 		private bool _lock(bool blocking = true)
 		{
+			flock f = 
+			{
+				F_WRLCK,
+				SEEK_SET,
+				0,
+				0
+			};
+			
+			return fcntl(super.fileHandle, blocking ? F_SETLKW : F_SETLK, &f) == 0;
+			/*
 			int op = LOCK_EX;
 			if(!blocking)
 				op |= LOCK_NB;
 				
 			int ret = flock(super.fileHandle, op);
 			return ret == 0;
+			*/
 		}
 	}
 	else
