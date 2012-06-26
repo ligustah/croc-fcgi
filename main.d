@@ -56,11 +56,26 @@ void main(char[][] args)
 	
 		while(FCGX.accept(r, true) >= 0)
 		{
-			pushRequest(t, r);
-			initModules(t);
-			
-			runFile(t, r.env["SCRIPT_FILENAME"]);
-			r.finish();
+			try
+			{
+				pushRequest(t, r);
+				initModules(t);
+				
+				runFile(t, r.env["SCRIPT_FILENAME"]);
+				r.finish();
+			}catch(Exception e)
+			{
+				void snk(char[] msg)
+				{
+					   Stdout(msg);
+				}
+				snk(e.toString);
+				if(e.info)
+				{
+						snk("\r\n");
+						e.info.writeOut(&snk);
+				}
+			}
 			
 			closeVM(&vm);
 			t = openVM(&vm);

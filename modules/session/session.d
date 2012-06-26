@@ -43,49 +43,126 @@ void session_init(CrocThread* t)
 struct SessionModule
 {
 static:
+	private Session getCurrent(CrocThread* t)
+	{
+		try
+		{
+			return getRegistryObject!(Session)(t, registryName);
+		}
+		catch(CrocException e)
+		{
+			catchException(t);
+			pop(t);
+			
+			throwStdException(t, "ApiError", "No currently open session found");
+		}
+	}
+	
 	/**
-		Returns the currently active session or creates a new session
+		Returns the currently active session
 	*/
 	uword get(CrocThread* t)
 	{
-		char[] id;
-		LockedFile file;
+		getCurrent(t).pushSession(t);		
+		return 1;
+	}
 	
-		getRegistry(t);
-		pushString(t, registryName);
-		if(!opin(t, -1, -2))
+	uword open(CrocThread* t)
+	{
+		if(hasRegistryVar(t, registryName))
 		{
-			//we don't have the session object cached
-			//check for session cookie
-			Cookie* cptr = cookieName in getRequest(t).cookies;
+			//should this be a nop instead?
+			throwStdException(t, "ApiError", "Cannot open session, already opened");
+		}
+		
+		pushRegistryObject(t, registryName, new Session(t));
+		
+		return 0;
+	}
+	
+	
+	/**
+		Save the currently opened session to disk and release its lock.
+	*/
+	uword close(CrocThread* t)
+	{		
+		if(hasRegistryVar(t, registryName))
+		{
+			getCurrent(t).close(t);
+		
+			getRegistry(t);
+			pushString(t, registryName);
+			removeKey(t, -2);
+			pop(t);
+		}
+		return 0;
+	}
+	
+	uword id(CrocThread* t)
+	{
+		pushString(t, getCurrent(t).id);
+		return 1;
+	}
+
+	uword init(CrocThread* t)
+	{
+		newFunction(t, &close, "close", 0);		newGlobal(t, "close");
+		newFunction(t, &open, "open", 0);		newGlobal(t, "open");
+		newFunction(t, &get, "get", 0);			newGlobal(t, "get");
+		newFunction(t, &id, "id", 0);			newGlobal(t, "id");
+		
+		open(t);
+		return 0;
+	}
+		
+	public const char[] registryName = "session.current";
+	public const char[] cookieName = "crocsession";
+}
+
+/**
+	This class is used to internally store all information
+	connected to one session.
+*/
+class Session
+{
+	private ulong 			_sessionRef;
+	private LockedFile		_sessionFile;
+	private Cookie			_sessionCookie;
+	private char[] 			_id;
+	private CrocThread*		_t;
+	
+	this(CrocThread* t)
+	{
+		_t = t;
+		
+		stackCheck(t,
+		{
+			//grab the session cookie
+			Cookie* cptr = SessionModule.cookieName in getRequest(t).cookies;
 			if(cptr)
 			{
-				id = (*cptr).value;
+				_id = (*cptr).value;
+				_sessionCookie = *cptr;
 			}
 			
-			if(!validID(id))	//either invalid or empty
+			if(!validID(_id))	//either invalid or empty
 			{
-				id = createID(getRequest(t));
+				_id = createID(getRequest(t));
+				
+				_sessionCookie = new Cookie(SessionModule.cookieName, id);
 				
 				//add our session cookie
-				getRequest(t).addCookie(new Cookie(cookieName, id));
+				getRequest(t).addCookie(_sessionCookie);
 			}
 			
-			pushString(t, id);
-			setRegistryVar(t, "session.id");
+			_sessionFile = new LockedFile(getExeDir().append("session_" ~ _id).toString);
+			_sessionFile.lock();
 			
-			file = new LockedFile(sessionPath ~ "session_" ~ id);
-			file.lock();
-			
-			pushRegistryObject(t, "session.lockFile", file);
-			
-			log.trace("session file length: {}", file.length);
-			
-			if(file.length)
+			if(_sessionFile.length)
 			{
 				//load the stored session
 				auto trans = newTable(t);
-				deserializeGraph(t, trans, file);
+				deserializeGraph(t, trans, _sessionFile);
 				
 				//bring trans table on top
 				swap(t);
@@ -97,52 +174,45 @@ static:
 				//start a new session
 				newTable(t);
 			}
-			setRegistryVar(t, registryName);
-		}
-		
-		// registryName is still on the stack
-		field(t, -2);
-		
-		return 1;
+			
+			//session table on top
+			_sessionRef = createRef(t, -1);
+			pop(t);
+		});
 	}
 	
-	uword close(CrocThread* t)
+	~this()
 	{
-		LockedFile f = getRegistryObject!(LockedFile)(t, "session.lockFile");
-		f.seek(0);
-		auto slot = getRegistryVar(t, registryName);
-		serializeGraph(t, slot, newTable(t), f);
-		f.truncate();
+		_sessionFile.close();
+	}
+	
+	public Cookie getCookie()
+	{
+		return _sessionCookie;
+	}
+	
+	public void pushSession(CrocThread* t)
+	{
+		pushRef(t, _sessionRef);
+	}
+	
+	public void close(CrocThread* t)
+	{
+		_sessionFile.seek(0);
+		auto slot = pushRef(t, _sessionRef);
+		serializeGraph(t, slot, newTable(t), _sessionFile);
+		pop(t, 2);
 		
-		f.close();
-		return 0;
+		_sessionFile.truncate();
+		_sessionFile.close();
 	}
 	
-	uword id(CrocThread* t)
+	public char[] id()
 	{
-		getRegistryVar(t, "session.id");
-		
-		return 1;
-	}
-
-	uword init(CrocThread* t)
-	{
-		newFunction(t, &close, "close", 0);		newGlobal(t, "close");
-		newFunction(t, &get, "get", 0);			newGlobal(t, "get");
-		newFunction(t, &id, "id", 0);			newGlobal(t, "id");
-		return 0;
+		return _id;
 	}
 	
-	/**
-		returns true if the id passed is valid
-	*/
-	bool validID(char[] id)
-	{
-		//will add more checks later on
-		return id.length > 0;
-	}
-	
-	char[] createID(FCGI_Request r)
+	private static char[] createID(FCGI_Request r)
 	{
 		auto sha = new Sha1();
 		auto p = r.env;
@@ -152,9 +222,15 @@ static:
 		return sha.hexDigest();
 	}
 	
-	private const char[] registryName = "session.current";
-	private const char[] cookieName = "crocsession";
-	private const char[] sessionPath = "C:\\Users\\Andre\\Documents\\croc-fcgi\\";
+		
+	/**
+		returns true if the id passed is valid
+	*/
+	private static bool validID(char[] id)
+	{
+		//will add more checks later on
+		return id.length > 0;
+	}
 }
 
 class LockedFile : File
@@ -173,9 +249,12 @@ class LockedFile : File
 	
 	public override void close()
 	{
-		//explicitly unlock file on close
-		release();
-		super.close();
+		if(_locked)
+		{
+			//explicitly unlock file on close
+			release();
+			super.close();
+		}
 	}
 	
 	public void release()
@@ -191,6 +270,11 @@ class LockedFile : File
 		bool l = _lock(blocking);
 		_locked = true;
 		return l;
+	}
+	
+	public bool isLocked()
+	{
+		return _locked;
 	}
 
 	version(Windows)

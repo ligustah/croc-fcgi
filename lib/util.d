@@ -33,6 +33,18 @@ public void pushRegistryObject(CrocThread* t, char[] key, Object value)
 	setRegistryVar(t, key);
 }
 
+public bool hasRegistryVar(CrocThread* t, char[] key)
+{
+	getRegistry(t);
+	pushString(t, key);
+	bool has = opin(t, -1, -2);
+	
+	//remove registry and string
+	pop(t, 2);
+	
+	return has;
+}
+
 version(Windows)
 {
 	import tango.sys.win32.UserGdi;
