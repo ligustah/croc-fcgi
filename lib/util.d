@@ -78,7 +78,7 @@ version(Windows)
 		
 		if(len != -1)
 		{
-			return path[0 .. len];
+			return path[0 .. len].dup;
 		}
 		else
 		{
@@ -93,5 +93,5 @@ else
 
 FilePath getExeDir()
 {
-	return FilePath(getExePath()).pop();
+	return FilePath(getExePath()).pop;
 }
