@@ -123,9 +123,19 @@ import Integer = tango.text.convert.Integer;
 int main(string[] args)
 {
 	char[][] defaultArgs = ["-Icroc-src", "-debug", "-g"];
-	if (!FS.exists("lib/croc" ~ lib_ext))
+	char[] croc_lib = "lib/croc" ~ lib_ext;
+	char[] croc_bin = "lib/crocc" ~ bin_ext;
+	
+	if (!FS.exists(croc_lib))
 	{
-		CDC.compile(["croc-src/croc"], ["-lib", "-debug", "-g", "-oflib/croc" ~ lib_ext]);
+		Stdout("[+] making croc lib").newline;
+		CDC.compile(["croc-src/croc"], ["-lib", "-debug", "-g", "-of" ~ croc_lib]);
+	}
+	
+	if(!FS.exists(croc_bin))
+	{
+		Stdout("[+] making crocc").newline;
+		CDC.compile(["croc-src/crocc.d", croc_lib], ["-of" ~ croc_bin, "-Icroc-src", "-profile"]);
 	}
 	
 	auto modules = compileModules();
@@ -151,13 +161,14 @@ char[][] linkModules(char[][] modules, char[] base)
 
 char[][] includeModules(char[][] modules, char[] base)
 {
-	auto outF = new File("enabled_modules.d", File.ReadWriteCreate);
+	auto outF = new File("enabled_modules.d_", File.ReadWriteCreate);
 	auto f = new FormatOutput!(char)(outF);
 	char[][] imports;
 	
 	f("module enabled_modules;").newline.newline;
 	
 	f("import croc.api;").newline;
+	f("import lib.util;").newline;
 	f("import lib.fcgi;").newline.newline;
 	
 	foreach(mod; modules)
@@ -165,6 +176,29 @@ char[][] includeModules(char[][] modules, char[] base)
 		f.formatln("import {0};", mod);
 		imports ~= "-I" ~ base ~ mod;
 	}
+	
+	f(
+`uword loadScriptModule(CrocThread* t)
+{
+	uword numReturns = 0;
+	
+	checkStringParam(t, 1);
+	
+	auto tab = getRegistryVar(t, "fcgi.scriptModules");
+	dup(t, 1);
+	
+	field(t, tab);
+	
+	if(isString(t, -1))
+	{
+		char[] name = getString(t, 1);
+		importModuleFromString(t, name, getString(t, -1), name ~ ".croc");
+		
+		numReturns = 1;
+	}
+	
+	return numReturns;
+}`);
 	
 	f.newline;
 	f("void initModules(CrocThread* t){").newline;
@@ -180,6 +214,42 @@ char[][] includeModules(char[][] modules, char[] base)
 	f("\t\tpop(t, 2);").newline;
 	f.newline;
 	
+	f(
+`	auto dest = lookupCT!("modules.loaders")(t);
+	newFunction(t, 1, &loadScriptModule, "loadBundled");
+	cateq(t, dest, 1);
+	pop(t);
+	newTable(t);
+	setRegistryVar(t, "fcgi.scriptModules");
+	
+	auto console = importModule(t, "console");
+	auto stream = importModule(t, "stream");
+
+		field(t, stream, "InStream");
+		pushNull(t);
+		pushNativeObj(t, cast(Object)getRequest(t).input);
+		pushBool(t, false);
+		rawCall(t, -4, 1);
+	fielda(t, console, "stdin");
+
+		field(t, stream, "OutStream");
+		pushNull(t);
+		pushNativeObj(t, cast(Object)getRequest(t).output);
+		pushBool(t, false);
+		rawCall(t, -4, 1);
+	fielda(t, console, "stdout");
+
+		field(t, stream, "OutStream");
+		pushNull(t);
+		pushNativeObj(t, cast(Object)getRequest(t).error);
+		pushBool(t, false);
+		rawCall(t, -4, 1);
+	fielda(t, console, "stderr");
+
+	pop(t);
+
+	`).newline;
+	
 	foreach(mod; modules)
 	{
 		f.formatln("\t{}_init(t);", mod);
@@ -190,6 +260,68 @@ char[][] includeModules(char[][] modules, char[] base)
 	f.close;
 	
 	return imports;
+}
+
+char[] scriptImport(FilePath mod, char[][] crocos)
+{
+	char[] path = mod.dup.append(mod.name).suffix(".d_").toString;
+	
+	if(!crocos.length)
+		return path;
+	
+	Stdout.formatln("[*] writing script import file to {}", path);
+	auto outF = new File(path, File.ReadWriteCreate);
+	auto f = new FormatOutput!(char)(outF);
+	
+	f.formatln("module {};", mod.name);
+	
+	f("import croc.api;").newline;
+	f("import croc.api_debug;").newline;
+	f("import croc.serialization;").newline;
+	f("import tango.io.device.Array;").newline;
+	f("import tango.io.Stdout;").newline;
+	
+	
+	int i = 0;
+	ubyte[1] buf;
+	
+	foreach(k,v; crocos)
+	{
+		auto inF = new File(v, File.ReadExisting);
+		f.format("private const ubyte[{}] module_data = [", inF.length, i++);
+		
+		while(inF.read(buf) != File.Eof) {
+			f.format("{:x#},", buf[0]);
+		}
+		
+		f.formatln("];");
+		inF.close;
+	}
+	
+	//f.formatln("static void[] module_data_{} = import(\"{}\");", k, v);
+	
+	f.formatln("void {}_init(CrocThread* t)", mod.name);
+	f("{").newline;
+	f.formatln("\tmakeModule(t, \"{0}\", &{0}_loader);", mod.name).newline;
+	f("}").newline;
+	
+	f.formatln("uword {}_loader(CrocThread* t)", mod.name);
+	f("{ printStack(t);").newline;
+	f("\tauto a = new Array(module_data);").newline;
+	f("\tchar[] loadName = void;").newline;
+	f("\tdeserializeModule(t, loadName, a); pop(t); printStack(t);").newline;
+	f("\treturn 1;").newline;
+	f("}").newline;
+	
+//	f("{").newline;
+//	f("{").newline;
+//	f("{").newline;
+//	f("{").newline;
+	
+	f.flush;
+	f.close;
+	
+	return path;
 }
 
 char[][] compileModules()
@@ -205,48 +337,76 @@ char[][] compileModules()
 	{
 		auto f = mod.dup.append("build.ini");
 		
-		if(!f.exists) // no ini, no module!
+		if(!f.exists) // no ini? no module!
 			continue;
 			
 		auto conf = new Ini(f.toString());
 		
-		bool native = conf.section["type"] == "native";
+		char[] type = conf.section["type"];
+		conf.section.set("name", mod.name);
+		
+		Stdout.formatln("[*] module: {} type: {}", mod.name, type);
 		moduleNames ~= mod.name();
 		
-		Stdout.formatln("module: {} native: {}", mod.name, native);
+		//compile it, if needed
+		auto libFile = FilePath("modules/" ~ mod.name ~ lib_ext);
 		
-		if(native)
+		if(libFile.exists())	//check if we have to recompile
 		{
-			//compile it, if needed
-			
-			auto libFile = FilePath("modules/" ~ mod.name ~ lib_ext);
-			
-			if(libFile.exists())	//check if we have to recompile
+			if(findNewest(mod) > libFile.modified)
 			{
-				if(findNewest(mod) > libFile.modified)
-				{
-					Stdout.formatln("module {} modified, recompiling", mod.name);
-				}
-				else
-				{
-					Stdout.formatln("skipping module {}, already up to date", mod.name);
-					continue;
-				}
+				Stdout.formatln("[*] module {} modified, recompiling", mod.name);
 			}
-			
-			char[][] arguments;
-			
-			for(int arg = 1; conf.section.has("arg" ~ Integer.toString(arg)); arg++)
+			else
 			{
-				arguments ~= conf.section["arg" ~ Integer.toString(arg)];
+				Stdout.formatln("[*] skipping module {}, already up to date", mod.name);
+				continue;
 			}
-			
-			//one command to rule them all!
-			CDC.compile(["."], ["-debug", "-g", "-I../../croc-src", "-I../../", "-lib", "-of../" ~ mod.name ~ lib_ext] ~ arguments, null, mod.toString, true);
+		}
+		
+		char[][] arguments;
+		
+		for(int arg = 1; conf.section.has("arg" ~ Integer.toString(arg)); arg++)
+		{
+			arguments ~= conf.section["arg" ~ Integer.toString(arg)];
+		}
+		
+		switch(type)
+		{
+			case "native":
+				compileNative(mod, libFile, arguments);
+				break;
+			case "script":
+				compileScript(mod, libFile, arguments);
+				break;
+			default:
+				Stdout.formatln("[-] unknown type '{}' for module '{}'", type, mod.name);
 		}
 	}
 	
 	return moduleNames;
+}
+
+void compileNative(FilePath mod, FilePath libFile, char[][] arguments)
+{
+	//one command to rule them all!
+	CDC.compile(["."], ["-debug", "-g", "-I../../croc-src", "-I../../", "-lib", "-of../../" ~ libFile.toString] ~ arguments, null, mod.toString, true);
+}
+
+void compileScript(FilePath mod, FilePath libFile, char[][] arguments)
+{
+	foreach(file; FS.scan(mod.toString, [".croc"]))	
+		System.execute("lib" ~ FS.sep ~ "crocc" ~ bin_ext, [file]);
+	
+	char[][] crocos = FS.scan(mod.toString, [".croco"]);
+	char[] path = scriptImport(mod, crocos);
+	if(path.length)
+	{
+		compileNative(mod, libFile, arguments);
+		
+		foreach(croco; crocos)
+			FS.remove(croco);
+	}
 }
 
 /**

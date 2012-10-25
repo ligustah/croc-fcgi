@@ -6,6 +6,7 @@ import tango.io.device.Conduit;
 import tango.io.device.Array;
 import tango.io.device.File;
 import tango.io.Stdout;
+import tango.io.Console;
 import tango.io.stream.Format;
 import tango.io.stream.Buffered;
 

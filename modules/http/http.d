@@ -2,6 +2,7 @@ module http;
 
 import croc.api;
 import croc.ex_bind;
+import croc.ex_library;
 import lib.fcgi;
 import lib.util;
 
@@ -23,7 +24,7 @@ static this()
 }
 
 void http_init(CrocThread* t)
-{	
+{
 	makeModule(t, "http", &HttpModule.init);
 }
 

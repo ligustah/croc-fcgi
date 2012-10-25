@@ -4,3 +4,4 @@ build.exe
 del build.exe
 del build.map
 del build.obj
+pause

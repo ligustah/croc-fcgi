@@ -50,24 +50,28 @@ void main(char[][] args)
 		FCGI_Request r;
 		
 		CrocVM vm;
-		
-		auto t = openVM(&vm);
-		loadStdlibs(t, CrocStdlib.Safe);
+		CrocThread *t = openVM(&vm);	//warmup
 	
 		while(FCGX.accept(r, true) >= 0)
 		{
 			try
 			{
+				log.trace("1");
 				pushRequest(t, r);
+				log.trace("2");
 				initModules(t);
+				log.trace("3");
 				
+				log.trace("4");
 				runFile(t, r.env["SCRIPT_FILENAME"]);
-				r.finish();
-			}catch(Exception e)
+				log.trace("5");
+				r.finish();		
+			} catch(Exception e)
 			{
+				auto f = new File(getExeDir().append("exception.log").toString, File.ReadWriteCreate);
 				void snk(char[] msg)
 				{
-					   Stdout(msg);
+					   f.write(msg);
 				}
 				snk(e.toString);
 				if(e.info)
@@ -75,11 +79,11 @@ void main(char[][] args)
 						snk("\r\n");
 						e.info.writeOut(&snk);
 				}
+			} finally
+			{
+				closeVM(&vm);
+				t = openVM(&vm);
 			}
-			
-			closeVM(&vm);
-			t = openVM(&vm);
-			loadStdlibs(t, CrocStdlib.Safe);
 		}
 	}
 	catch(Exception e)

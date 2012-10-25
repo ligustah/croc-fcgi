@@ -15,6 +15,7 @@ import tango.net.http.HttpCookies;
 
 import croc.api;
 import croc.api_debug;
+import croc.ex_library;
 import croc.serialization;
 
 import tango.util.log.Log;
@@ -183,7 +184,8 @@ class Session
 	
 	~this()
 	{
-		_sessionFile.close();
+		if(_sessionFile)
+			_sessionFile.close();
 	}
 	
 	public Cookie getCookie()

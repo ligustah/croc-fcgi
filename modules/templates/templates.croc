@@ -1,0 +1,13 @@
+module templates
+
+global function test()
+{
+	writeln $ "blubb"
+}
+
+global t = "lala"
+
+function main()
+{
+	writeln $ "main"
+}

@@ -6,6 +6,7 @@ import Integer = tango.text.convert.Integer;
 import croc.api;
 import croc.api_debug;
 import croc.ex_bind;
+import croc.ex_library;
 import croc.stdlib_time;
 
 import dbi.DBI;
@@ -265,7 +266,7 @@ static:
 			case BindType.Binary:
 				ubyte[] data;
 				inst.getField(data, i);
-				memblockFromDArray(t, data);
+				memblockViewNativeArray(t, data);
 				break;
 			case BindType.Time:
 				Time field;
